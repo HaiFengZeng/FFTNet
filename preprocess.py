@@ -91,9 +91,12 @@ def preprocess(args):
     calc_stats(spc_list, out_dir)
      
 
-def write_metadata(metadata, out_dir):
+def write_metadata(metadata, out_dir,split=0.9):
     with open(os.path.join(out_dir, 'train.txt'), 'w', encoding='utf-8') as f:
-        for m in metadata:
+        for m in metadata[:int(len(metadata)*split)]:
+            f.write('|'.join([str(x) for x in m]) + '\n')
+    with open(os.path.join(out_dir, 'test.txt'), 'w', encoding='utf-8') as f:
+        for m in metadata[int(len(metadata)*split):]:
             f.write('|'.join([str(x) for x in m]) + '\n')
     frames = sum([m[2] for m in metadata])
     hours = frames * hparams.frame_shift_ms / (3600 * 1000)
@@ -102,8 +105,8 @@ def write_metadata(metadata, out_dir):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--wav_dir', default='cmu_us_slt_arctic/wav')
-    parser.add_argument('--output', default='training_data')
+    parser.add_argument('--wav_dir', default='/home/jinqiangzeng/work/data/speech/ljspeech/LJSpeech-1.0/wavs')
+    parser.add_argument('--output', default='ljspeeh')
     parser.add_argument('--num_workers', type=int, default=cpu_count())
     args = parser.parse_args()
     preprocess(args)
