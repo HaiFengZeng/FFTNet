@@ -2,16 +2,21 @@
 
 A PyTorch implementation of the [FFTNet: a Real-Time Speaker-Dependent Neural Vocoder](http://gfx.cs.princeton.edu/pubs/Jin_2018_FAR/)
 
+Want it to support for gaussian continus distribution output
+
 ## Quick Start:
 1. Install requirements:
   ```
   pip install -r requirements.txt
   ```
 2. Download dataset:
-  ```
+```
   wget http://festvox.org/cmu_arctic/cmu_arctic/packed/cmu_us_slt_arctic-0.95-release.tar.bz2
   tar xf cmu_us_slt_arctic-0.95-release.tar.bz2
-  ```
+```
+  
+   - Use Lj-speech datasets
+   
 3. Extract features:
   ```
   python preprocess.py
@@ -24,7 +29,10 @@ A PyTorch implementation of the [FFTNet: a Real-Time Speaker-Dependent Neural Vo
     ```
     python generate.py --checkpoint=/path/to/model --lc_file=/path/to/local_conditon
     ```
-
+6. Tensorboard:
+    ```
+    tensorboard --logdir='./log/gaussian'
+    ```
 ## TODO:
 - [ ] Test and modify conditonal sampling.
 - [ ] Fast generation. (Without fast generation, it generates about 230 samples per second with a free TITAN Xp.)
