@@ -8,9 +8,14 @@ import numpy as np
 import os
 import torch
 
-
 from torch.utils.data import Dataset
 from utils.utils import mu_law_encode
+from hparams import hparams
+
+
+def collate_fn(batch):
+    hop_length = int(hparams.frame_shift_ms / 1000 * hparams.sample_rate)
+
 
 class CustomDataset(Dataset):
 
@@ -21,6 +26,7 @@ class CustomDataset(Dataset):
                  upsample_factor=200,
                  quantization_channels=256,
                  use_local_condition=True,
+                 upsample_network=False,
                  noise_injecting=True,
                  feat_transform=None):
         with open(meta_file, encoding='utf-8') as f:
@@ -32,33 +38,47 @@ class CustomDataset(Dataset):
         self.use_local_condition = use_local_condition
         self.feat_transform = feat_transform
         self.noise_injecting = noise_injecting
-
+        self.upsample_network = upsample_network
         self.audio_buffer, self.local_condition_buffer = self._load_data(
-                           self.metadata, use_local_condition, post_fn=lambda x: np.load(x))
+            self.metadata, use_local_condition, post_fn=lambda x: np.load(x))
 
     def __len__(self):
         return len(self.audio_buffer)
 
     def __getitem__(self, index):
         audios = self.audio_buffer[index]
+        local_condition = self.local_condition_buffer[index]
+        max_time_frame = self.sample_size // hparams.hop
+        rand_condition_pos = np.random.randint(0, len(local_condition) - max_time_frame)
         rand_pos = np.random.randint(0, len(audios) - self.sample_size)
 
         if self.use_local_condition:
-            local_condition = self.local_condition_buffer[index]
-            local_condition = np.repeat(local_condition, self.upsample_factor, axis=0)
-            local_condition = local_condition[rand_pos : rand_pos + self.sample_size]
+            if not self.upsample_network:
+                audios = audios[rand_pos: rand_pos + self.sample_size]
+                local_condition = self.local_condition_buffer[index]
+                local_condition = np.repeat(local_condition, self.upsample_factor, axis=0)
+                local_condition = local_condition[rand_pos: rand_pos + self.sample_size]
+                local_condition = np.pad(local_condition, [[self.receptive_field, 0], [0, 0]], 'constant')
+                target = audios
+            else:
+                local_condition = self.local_condition_buffer[index]
+                local_condition = local_condition[rand_condition_pos:rand_condition_pos + max_time_frame, :]
+                local_condition=local_condition.transpose(1,0)
+                ts = rand_condition_pos * hparams.hop
+                audios = audios[ts:ts + self.sample_size]
+                target = audios
         else:
-            audios = np.pad(audios, [[self.receptive_field, 0], [0, 0]], 'constant')
+            # audios = np.pad(audios, [[self.receptive_field, 0], [0, 0]], 'constant')
+            # audios left padding N
             local_condition = None
 
-        audios = audios[rand_pos : rand_pos + self.sample_size]
-        target = mu_law_encode(audios, self.quantization_channels)
+            target = mu_law_encode(audios, self.quantization_channels)
         if self.noise_injecting:
-            noise = np.random.normal(0.0, 1.0/self.quantization_channels, audios.shape)
+            noise = np.random.normal(0.0, 1.0 / self.quantization_channels, audios.shape)
             audios = audios + noise
 
         audios = np.pad(audios, [[self.receptive_field, 0], [0, 0]], 'constant')
-        local_condition = np.pad(local_condition, [[self.receptive_field, 0], [0, 0]], 'constant')
+
         return torch.FloatTensor(audios), torch.LongTensor(target), torch.FloatTensor(local_condition)
 
     def _load_data(self, metadata, use_local_condition, post_fn=lambda x: x):
@@ -74,4 +94,3 @@ class CustomDataset(Dataset):
                         feat = self.feat_transform(feat)
                     local_condition_buffer.append(feat)
         return audio_buffer, local_condition_buffer
-
